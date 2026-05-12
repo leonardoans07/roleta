@@ -1,26 +1,25 @@
 "use client";
+
 import { useState } from "react";
+import Tesseract from "tesseract.js";
 
 export default function Home() {
-  const [number, setNumber] = useState("");
+
+  const [input, setInput] = useState("");
   const [history, setHistory] = useState([]);
+
   const [prediction, setPrediction] = useState("WAIT");
   const [confidence, setConfidence] = useState(0);
   const [trend, setTrend] = useState("NO TREND");
-  const [status, setStatus] = useState("WAITING CONFIRMATION");
+  const [status, setStatus] = useState("WAITING");
 
-  const [wins, setWins] = useState(0);
-  const [losses, setLosses] = useState(0);
+  const [ocrText, setOcrText] = useState("");
+  const [loadingOCR, setLoadingOCR] = useState(false);
 
-  const [lastSignal, setLastSignal] = useState(null);
-  const [signalActive, setSignalActive] = useState(false);
-
-  const rouletteColors = {
-    red: [
-      1,3,5,7,9,12,14,16,18,
-      19,21,23,25,27,30,32,34,36
-    ]
-  };
+  const redNumbers = [
+    1,3,5,7,9,12,14,16,18,
+    19,21,23,25,27,30,32,34,36
+  ];
 
   const voisins = [
     22,18,29,7,28,12,35,3,26,
@@ -29,7 +28,9 @@ export default function Home() {
 
   function getColor(n) {
     if (n === 0) return "green";
-    return rouletteColors.red.includes(n) ? "red" : "black";
+    return redNumbers.includes(n)
+      ? "red"
+      : "black";
   }
 
   function getDozen(n) {
@@ -40,182 +41,178 @@ export default function Home() {
   }
 
   function getSector(n) {
-    if (voisins.includes(n)) return "VOISINS";
-    if (n === 0) return "ZERO";
-    if ([1,6,9,14,17,20,31,34].includes(n)) return "ORPHELINS";
+    if (voisins.includes(n)) {
+      return "VOISINS";
+    }
+
+    if ([1,6,9,14,17,20,31,34].includes(n)) {
+      return "ORPHELINS";
+    }
+
     return "TIERS";
   }
 
-  function addNumber() {
-    const n = parseInt(number);
+  function analyze(updated) {
 
-    if (isNaN(n) || n < 0 || n > 36) return;
-
-    const updated = [n, ...history].slice(0, 30);
-
-    // =========================
-    // CHECK WIN / LOSS
-    // =========================
-
-    if (signalActive && lastSignal) {
-      let win = false;
-
-      if (lastSignal.type === "DOZEN") {
-        win = getDozen(n) === lastSignal.value;
-      }
-
-      if (lastSignal.type === "SECTOR") {
-        win = getSector(n) === lastSignal.value;
-      }
-
-      if (win) {
-        setWins(prev => prev + 1);
-        setStatus("✅ WIN");
-      } else {
-        setLosses(prev => prev + 1);
-        setStatus("❌ LOSS");
-      }
-
-      setSignalActive(false);
+    if (updated.length < 5) {
+      setPrediction("WAIT");
+      setConfidence(0);
+      return;
     }
 
-    // =========================
-    // ANALYSIS
-    // =========================
-
-    const last5 = updated.slice(0, 5);
+    const recent = updated.slice(0, 6);
 
     const dozens = {};
     const sectors = {};
-    const colors = {};
 
-    last5.forEach(num => {
-      const d = getDozen(num);
-      const s = getSector(num);
-      const c = getColor(num);
+    recent.forEach(n => {
+
+      const d = getDozen(n);
+      const s = getSector(n);
 
       dozens[d] = (dozens[d] || 0) + 1;
       sectors[s] = (sectors[s] || 0) + 1;
-      colors[c] = (colors[c] || 0) + 1;
+
     });
 
     let bestDozen = "";
     let bestDozenCount = 0;
 
-    Object.entries(dozens).forEach(([key, val]) => {
-      if (val > bestDozenCount) {
-        bestDozen = key;
-        bestDozenCount = val;
+    Object.entries(dozens).forEach(([k,v]) => {
+      if (v > bestDozenCount) {
+        bestDozen = k;
+        bestDozenCount = v;
       }
     });
 
     let bestSector = "";
     let bestSectorCount = 0;
 
-    Object.entries(sectors).forEach(([key, val]) => {
-      if (val > bestSectorCount) {
-        bestSector = key;
-        bestSectorCount = val;
+    Object.entries(sectors).forEach(([k,v]) => {
+      if (v > bestSectorCount) {
+        bestSector = k;
+        bestSectorCount = v;
       }
     });
 
-    // =========================
-    // SMART AI LOGIC
-    // =========================
-
-    let nextPrediction = "WAIT";
-    let nextConfidence = 0;
-    let nextTrend = "NO TREND";
-    let nextStatus = "WAITING CONFIRMATION";
-
-    // VERY STRONG SIGNAL
+    // STRONG SIGNAL
     if (
       bestDozenCount >= 4 &&
       bestSectorCount >= 3
     ) {
-      nextPrediction = `${bestDozen}`;
-      nextConfidence = 92;
-      nextTrend = "🔥 STRONG TREND";
 
-      setLastSignal({
-        type: "DOZEN",
-        value: bestDozen
-      });
+      setPrediction(bestDozen);
+      setConfidence(91);
+      setTrend("🔥 STRONG TREND");
+      setStatus("🎯 ENTRY CONFIRMED");
 
-      setSignalActive(true);
-
-      nextStatus = "🎯 ENTRY CONFIRMED";
+      return;
     }
 
     // MEDIUM SIGNAL
-    else if (
-      bestDozenCount >= 3 &&
-      bestSectorCount >= 2
+    if (
+      bestDozenCount >= 3
     ) {
-      nextPrediction = `${bestDozen}`;
-      nextConfidence = 75;
-      nextTrend = "📈 MEDIUM TREND";
 
-      setLastSignal({
-        type: "DOZEN",
-        value: bestDozen
-      });
+      setPrediction(bestDozen);
+      setConfidence(75);
+      setTrend("📈 MEDIUM TREND");
+      setStatus("⚡ POSSIBLE ENTRY");
 
-      setSignalActive(true);
-
-      nextStatus = "⚡ POSSIBLE ENTRY";
+      return;
     }
 
-    // SECTOR TREND
-    else if (
+    // SECTOR
+    if (
       bestSectorCount >= 4
     ) {
-      nextPrediction = `${bestSector}`;
-      nextConfidence = 80;
-      nextTrend = "🎡 SECTOR DOMINANCE";
 
-      setLastSignal({
-        type: "SECTOR",
-        value: bestSector
-      });
+      setPrediction(bestSector);
+      setConfidence(82);
+      setTrend("🎡 SECTOR DOMINANCE");
+      setStatus("🔥 SECTOR ENTRY");
 
-      setSignalActive(true);
-
-      nextStatus = "🎯 SECTOR ENTRY";
+      return;
     }
 
-    setPrediction(nextPrediction);
-    setConfidence(nextConfidence);
-    setTrend(nextTrend);
+    setPrediction("WAIT");
+    setConfidence(0);
+    setTrend("NO TREND");
+    setStatus("WAITING");
+  }
 
-    if (!signalActive) {
-      setStatus(nextStatus);
-    }
+  function addNumber(n) {
+
+    if (isNaN(n) || n < 0 || n > 36) return;
+
+    const updated = [n, ...history]
+      .slice(0, 30);
 
     setHistory(updated);
-    setNumber("");
+
+    analyze(updated);
+
+    setInput("");
+  }
+
+  async function handleOCR(file) {
+
+    setLoadingOCR(true);
+
+    const result =
+      await Tesseract.recognize(
+        file,
+        "eng"
+      );
+
+    const text =
+      result.data.text;
+
+    setOcrText(text);
+
+    // PEGAR NUMEROS
+    const found =
+      text.match(/\d+/g);
+
+    if (found) {
+
+      const cleaned =
+        found
+          .map(n => parseInt(n))
+          .filter(
+            n => n >= 0 && n <= 36
+          );
+
+      if (cleaned.length > 0) {
+
+        const updated = [
+          ...cleaned.reverse(),
+          ...history
+        ].slice(0, 30);
+
+        setHistory(updated);
+
+        analyze(updated);
+      }
+    }
+
+    setLoadingOCR(false);
   }
 
   const hotNumbers = {};
 
   history.forEach(n => {
-    hotNumbers[n] = (hotNumbers[n] || 0) + 1;
+    hotNumbers[n] =
+      (hotNumbers[n] || 0) + 1;
   });
 
-  const topHot = Object.entries(hotNumbers)
-    .sort((a,b) => b[1]-a[1])
-    .slice(0,5);
-
-  const redCount = history.filter(n => getColor(n)==="red").length;
-  const blackCount = history.filter(n => getColor(n)==="black").length;
-  const evenCount = history.filter(n => n !==0 && n % 2 ===0).length;
-  const oddCount = history.filter(n => n % 2 !==0).length;
-
-  const dozen1 = history.filter(n => n>=1 && n<=12).length;
-  const dozen2 = history.filter(n => n>=13 && n<=24).length;
-  const dozen3 = history.filter(n => n>=25 && n<=36).length;
+  const topHot =
+    Object.entries(hotNumbers)
+      .sort((a,b)=>b[1]-a[1])
+      .slice(0,5);
 
   return (
+
     <main
       style={{
         background:"#000",
@@ -225,30 +222,48 @@ export default function Home() {
         fontFamily:"Arial"
       }}
     >
-      <h1 style={{fontSize:"42px"}}>
-        ⚡ Lightning Roulette AI PRO
+
+      <h1
+        style={{
+          fontSize:"44px"
+        }}
+      >
+        ⚡ Roulette AI OCR
       </h1>
 
-      <div style={{display:"flex",gap:"10px",marginTop:"20px"}}>
+      {/* INPUTS */}
+
+      <div
+        style={{
+          display:"flex",
+          gap:"10px",
+          marginTop:"20px",
+          flexWrap:"wrap"
+        }}
+      >
+
         <input
-          value={number}
-          onChange={(e)=>setNumber(e.target.value)}
-          placeholder="Enter roulette number"
+          value={input}
+          onChange={(e)=>
+            setInput(e.target.value)
+          }
+          placeholder="Enter number"
           style={{
             padding:"14px",
-            width:"220px",
+            width:"200px",
             fontSize:"18px",
             color:"#000"
           }}
         />
 
         <button
-          onClick={addNumber}
+          onClick={()=>
+            addNumber(parseInt(input))
+          }
           style={{
             background:"#00ff99",
-            color:"#000",
             border:"none",
-            padding:"14px 20px",
+            padding:"14px 22px",
             fontWeight:"bold",
             cursor:"pointer"
           }}
@@ -260,51 +275,102 @@ export default function Home() {
           onClick={()=>{
             setHistory([]);
             setPrediction("WAIT");
-            setWins(0);
-            setLosses(0);
-            setStatus("RESET");
             setConfidence(0);
+            setTrend("NO TREND");
+            setStatus("RESET");
           }}
           style={{
             background:"red",
             color:"#fff",
             border:"none",
-            padding:"14px 20px",
+            padding:"14px 22px",
             fontWeight:"bold",
             cursor:"pointer"
           }}
         >
           RESET
         </button>
+
       </div>
 
-      {/* AI BOX */}
+      {/* OCR */}
 
       <div
         style={{
           background:"#090909",
-          marginTop:"25px",
-          padding:"25px",
-          borderRadius:"12px"
+          padding:"20px",
+          borderRadius:"12px",
+          marginTop:"25px"
         }}
       >
+
+        <h2>📸 OCR Upload</h2>
+
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e)=>{
+
+            const file =
+              e.target.files[0];
+
+            if(file){
+              handleOCR(file);
+            }
+
+          }}
+          style={{
+            marginTop:"15px"
+          }}
+        />
+
+        {loadingOCR && (
+
+          <h3
+            style={{
+              color:"#00ff99",
+              marginTop:"15px"
+            }}
+          >
+            Reading roulette numbers...
+          </h3>
+
+        )}
+
+      </div>
+
+      {/* AI */}
+
+      <div
+        style={{
+          background:"#090909",
+          padding:"25px",
+          borderRadius:"12px",
+          marginTop:"20px"
+        }}
+      >
+
         <h2>🤖 AI PREDICTION</h2>
 
         <h1
           style={{
             color:"#00ff99",
-            fontSize:"58px",
+            fontSize:"60px",
             marginTop:"10px"
           }}
         >
           {prediction}
         </h1>
 
-        <h2 style={{marginTop:"15px"}}>
+        <h2>
           CONFIDENCE: {confidence}%
         </h2>
 
-        <h3 style={{marginTop:"10px"}}>
+        <h3
+          style={{
+            marginTop:"10px"
+          }}
+        >
           {trend}
         </h3>
 
@@ -316,114 +382,48 @@ export default function Home() {
         >
           {status}
         </h2>
+
       </div>
 
-      {/* GRID */}
+      {/* HOT NUMBERS */}
 
       <div
         style={{
-          display:"grid",
-          gridTemplateColumns:"repeat(4,1fr)",
-          gap:"15px",
+          background:"#090909",
+          padding:"20px",
+          borderRadius:"12px",
           marginTop:"20px"
         }}
       >
 
-        {/* HOT */}
+        <h2>🔥 HOT NUMBERS</h2>
 
         <div
           style={{
-            background:"#090909",
-            padding:"20px",
-            borderRadius:"12px"
+            display:"flex",
+            gap:"10px",
+            flexWrap:"wrap",
+            marginTop:"15px"
           }}
         >
-          <h2>🔥 HOT NUMBERS</h2>
 
-          <div
-            style={{
-              display:"flex",
-              flexWrap:"wrap",
-              gap:"10px",
-              marginTop:"15px"
-            }}
-          >
-            {topHot.map(([n,c])=>(
-              <div
-                key={n}
-                style={{
-                  background:"#00ff99",
-                  color:"#000",
-                  padding:"10px",
-                  borderRadius:"8px",
-                  fontWeight:"bold"
-                }}
-              >
-                {n} ({c}x)
-              </div>
-            ))}
-          </div>
-        </div>
+          {topHot.map(([n,c])=>(
 
-        {/* SCORE */}
+            <div
+              key={n}
+              style={{
+                background:"#00ff99",
+                color:"#000",
+                padding:"10px",
+                borderRadius:"8px",
+                fontWeight:"bold"
+              }}
+            >
+              {n} ({c}x)
+            </div>
 
-        <div
-          style={{
-            background:"#090909",
-            padding:"20px",
-            borderRadius:"12px"
-          }}
-        >
-          <h2>📊 SCORE</h2>
+          ))}
 
-          <h1 style={{color:"#00ff99"}}>
-            WINS: {wins}
-          </h1>
-
-          <h1 style={{color:"red"}}>
-            LOSSES: {losses}
-          </h1>
-
-          <h2>
-            ACCURACY: {
-              wins + losses > 0
-              ? ((wins/(wins+losses))*100).toFixed(1)
-              : 0
-            }%
-          </h2>
-        </div>
-
-        {/* DOZENS */}
-
-        <div
-          style={{
-            background:"#090909",
-            padding:"20px",
-            borderRadius:"12px"
-          }}
-        >
-          <h2>🎯 DOZENS</h2>
-
-          <h3>1ST 12: {dozen1}</h3>
-          <h3>2ND 12: {dozen2}</h3>
-          <h3>3RD 12: {dozen3}</h3>
-        </div>
-
-        {/* COLORS */}
-
-        <div
-          style={{
-            background:"#090909",
-            padding:"20px",
-            borderRadius:"12px"
-          }}
-        >
-          <h2>🎨 COLORS</h2>
-
-          <h3>🔴 RED: {redCount}</h3>
-          <h3>⚫ BLACK: {blackCount}</h3>
-          <h3>⚪ EVEN: {evenCount}</h3>
-          <h3>🟣 ODD: {oddCount}</h3>
         </div>
 
       </div>
@@ -438,7 +438,8 @@ export default function Home() {
           marginTop:"20px"
         }}
       >
-        <h2>🕓 LAST 30 NUMBERS</h2>
+
+        <h2>🎲 LAST 30 NUMBERS</h2>
 
         <div
           style={{
@@ -448,30 +449,60 @@ export default function Home() {
             marginTop:"15px"
           }}
         >
-          {history.map((n,index)=>(
+
+          {history.map((n,i)=>(
+
             <div
-              key={index}
+              key={i}
               style={{
-                width:"45px",
-                height:"45px",
+                width:"50px",
+                height:"50px",
                 borderRadius:"8px",
                 background:
                   getColor(n)==="red"
                   ? "#ff3355"
                   : getColor(n)==="black"
                   ? "#222"
-                  : "#00ff99",
+                  : "green",
                 display:"flex",
                 justifyContent:"center",
                 alignItems:"center",
                 fontWeight:"bold",
-                fontSize:"18px"
+                fontSize:"20px"
               }}
             >
               {n}
             </div>
+
           ))}
+
         </div>
+
+      </div>
+
+      {/* OCR RAW */}
+
+      <div
+        style={{
+          background:"#090909",
+          padding:"20px",
+          borderRadius:"12px",
+          marginTop:"20px"
+        }}
+      >
+
+        <h2>📝 OCR RAW TEXT</h2>
+
+        <p
+          style={{
+            color:"#aaa",
+            marginTop:"10px",
+            whiteSpace:"pre-wrap"
+          }}
+        >
+          {ocrText}
+        </p>
+
       </div>
 
     </main>
