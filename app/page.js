@@ -1,360 +1,375 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-
-const redNumbers = [
-  1,3,5,7,9,12,14,16,18,19,
-  21,23,25,27,30,32,34,36
-]
-
-const wheel = [
-  0,32,15,19,4,21,2,25,17,34,6,
-  27,13,36,11,30,8,23,10,5,24,
-  16,33,1,20,14,31,9,22,18,29,
-  7,28,12,35,3,26
-]
+import { useState, useMemo } from 'react'
 
 export default function Home() {
-
-  const [input, setInput] = useState('')
-  const [numbers, setNumbers] = useState([])
-  const [prediction, setPrediction] = useState('Waiting data...')
+  const [number, setNumber] = useState('')
+  const [history, setHistory] = useState([])
   const [wins, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
   const [lastPrediction, setLastPrediction] = useState(null)
-  const [hotNumbers, setHotNumbers] = useState([])
 
-  useEffect(() => {
-    const saved = localStorage.getItem('roulette_numbers')
+  // Ordem real da roleta europeia
+  const wheel = [
+    0, 32, 15, 19, 4, 21, 2, 25, 17, 34,
+    6, 27, 13, 36, 11, 30, 8, 23, 10, 5,
+    24, 16, 33, 1, 20, 14, 31, 9, 22, 18,
+    29, 7, 28, 12, 35, 3, 26
+  ]
 
-    if(saved){
-      setNumbers(JSON.parse(saved))
-    }
-  }, [])
+  const voisins = [
+    22,18,29,7,28,12,35,3,26,0,32,15,19,4,21,2,25
+  ]
 
-  useEffect(() => {
-    localStorage.setItem(
-      'roulette_numbers',
-      JSON.stringify(numbers)
-    )
-  }, [numbers])
+  const tiers = [
+    27,13,36,11,30,8,23,10,5,24,16,33
+  ]
 
-  const getColor = (n) => {
-    if(n === 0) return 'green'
-    return redNumbers.includes(n) ? 'red' : 'black'
-  }
+  const orphelins = [
+    1,20,14,31,9,17,34,6
+  ]
 
-  const getRegion = (n) => {
-    if(n >= 1 && n <= 12) return '1-12'
-    if(n >= 13 && n <= 24) return '13-24'
-    if(n >= 25 && n <= 36) return '25-36'
+  const redNumbers = [
+    1,3,5,7,9,12,14,16,18,19,
+    21,23,25,27,30,32,34,36
+  ]
+
+  const blackNumbers = [
+    2,4,6,8,10,11,13,15,17,20,
+    22,24,26,28,29,31,33,35
+  ]
+
+  function getSector(num) {
+    if (voisins.includes(num)) return 'VOISINS'
+    if (tiers.includes(num)) return 'TIERS'
+    if (orphelins.includes(num)) return 'ORPHELINS'
     return 'ZERO'
   }
 
-  const getSector = (n) => {
+  function addNumber() {
+    const num = Number(number)
 
-    const index = wheel.indexOf(n)
+    if (isNaN(num) || num < 0 || num > 36) return
 
-    if(index <= 12) return 'Voisins'
-    if(index <= 24) return 'Tiers'
+    const updated = [num, ...history].slice(0, 100)
 
-    return 'Orphelins'
-  }
+    // verificar win/loss da previsão anterior
+    if (lastPrediction) {
+      const sector = getSector(num)
 
-  const detectPattern = (arr) => {
-
-    if(arr.length < 6){
-      return 'Collecting spins...'
-    }
-
-    const lastThree = arr.slice(0,3)
-
-    const sameRegion =
-      getRegion(lastThree[0]) === getRegion(lastThree[1])
-
-    if(sameRegion){
-      return `🔥 Pattern detected: ${getRegion(lastThree[0])}`
-    }
-
-    const sameSector =
-      getSector(lastThree[0]) === getSector(lastThree[1])
-
-    if(sameSector){
-      return `⚡ Sector repeating: ${getSector(lastThree[0])}`
-    }
-
-    const evenPattern =
-      lastThree.every(n => n % 2 === 0)
-
-    if(evenPattern){
-      return '🟢 Even streak detected'
-    }
-
-    return 'No strong pattern'
-  }
-
-  const generatePrediction = (arr) => {
-
-    if(arr.length < 5){
-      return 'Waiting more numbers...'
-    }
-
-    const latest = arr[0]
-
-    const region = getRegion(latest)
-
-    if(region === '1-12'){
-      return 'Possible move → 13-24'
-    }
-
-    if(region === '13-24'){
-      return 'Possible move → 25-36'
-    }
-
-    if(region === '25-36'){
-      return 'Possible move → 1-12'
-    }
-
-    return 'Watch table'
-  }
-
-  const updateHotNumbers = (arr) => {
-
-    const freq = {}
-
-    arr.forEach(n => {
-      freq[n] = (freq[n] || 0) + 1
-    })
-
-    const sorted = Object.entries(freq)
-      .sort((a,b) => b[1] - a[1])
-      .slice(0,5)
-
-    setHotNumbers(sorted)
-  }
-
-  const addNumber = () => {
-
-    if(input === '') return
-
-    const num = parseInt(input)
-
-    if(num < 0 || num > 36) return
-
-    const updated = [num, ...numbers].slice(0,30)
-
-    if(lastPrediction){
-
-      const predictedRegion =
-        lastPrediction.split('→ ')[1]
-
-      if(predictedRegion){
-
-        if(getRegion(num) === predictedRegion){
-
-          setWins(prev => prev + 1)
-
-        } else {
-
-          setLosses(prev => prev + 1)
-
-        }
+      if (sector === lastPrediction) {
+        setWins(prev => prev + 1)
+      } else {
+        setLosses(prev => prev + 1)
       }
     }
 
-    const newPrediction =
-      generatePrediction(updated)
-
-    setLastPrediction(newPrediction)
-
-    setPrediction(
-      detectPattern(updated) +
-      ' | ' +
-      newPrediction
-    )
-
-    updateHotNumbers(updated)
-
-    setNumbers(updated)
-
-    setInput('')
+    setHistory(updated)
+    setNumber('')
   }
 
-  const resetAll = () => {
+  const stats = useMemo(() => {
+    const last30 = history.slice(0, 30)
 
-    setNumbers([])
-    setWins(0)
-    setLosses(0)
-    setPrediction('Waiting data...')
-    setHotNumbers([])
+    let reds = 0
+    let blacks = 0
+    let evens = 0
+    let odds = 0
 
-    localStorage.removeItem('roulette_numbers')
-  }
+    const sectorCount = {
+      VOISINS: 0,
+      TIERS: 0,
+      ORPHELINS: 0,
+      ZERO: 0
+    }
+
+    const frequency = {}
+
+    last30.forEach(n => {
+      if (redNumbers.includes(n)) reds++
+      if (blackNumbers.includes(n)) blacks++
+
+      if (n !== 0 && n % 2 === 0) evens++
+      if (n % 2 !== 0) odds++
+
+      const sector = getSector(n)
+      sectorCount[sector]++
+
+      frequency[n] = (frequency[n] || 0) + 1
+    })
+
+    const hotNumbers = Object.entries(frequency)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+
+    // previsão IA simples
+    let prediction = 'WAIT'
+
+    const strongestSector = Object.entries(sectorCount).sort(
+      (a, b) => b[1] - a[1]
+    )[0]
+
+    if (strongestSector[1] >= 6) {
+      prediction = strongestSector[0]
+    }
+
+    setTimeout(() => {
+      setLastPrediction(prediction)
+    }, 0)
+
+    return {
+      reds,
+      blacks,
+      evens,
+      odds,
+      hotNumbers,
+      prediction,
+      sectorCount
+    }
+  }, [history])
+
+  const accuracy =
+    wins + losses === 0
+      ? 0
+      : ((wins / (wins + losses)) * 100).toFixed(1)
 
   return (
-
-    <main style={{
-      background:'#111',
-      minHeight:'100vh',
-      color:'white',
-      padding:'30px',
-      fontFamily:'Arial'
-    }}>
-
-      <h1 style={{
-        fontSize:'42px',
-        marginBottom:'10px'
-      }}>
-        ⚡ Roulette AI Tracker
+    <main
+      style={{
+        background: '#050505',
+        minHeight: '100vh',
+        color: 'white',
+        padding: 20,
+        fontFamily: 'Arial'
+      }}
+    >
+      <h1
+        style={{
+          fontSize: 48,
+          fontWeight: 'bold',
+          marginBottom: 20
+        }}
+      >
+        ⚡ Lightning Roulette AI
       </h1>
 
-      <h2>
-        WINS: 🟢 {wins}
-        {' | '}
-        LOSSES: 🔴 {losses}
-      </h2>
-
-      <div style={{
-        marginTop:'20px',
-        display:'flex',
-        gap:'10px'
-      }}>
-
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          marginBottom: 20
+        }}
+      >
         <input
-          type="number"
-          placeholder="0-36"
-          value={input}
-          onChange={(e)=>setInput(e.target.value)}
+          value={number}
+          onChange={(e) => setNumber(e.target.value)}
+          placeholder="Enter roulette number"
           style={{
-            padding:'12px',
-            fontSize:'18px',
-            width:'120px'
+            padding: 15,
+            fontSize: 20,
+            width: 250,
+            color: 'black'
           }}
         />
 
         <button
           onClick={addNumber}
           style={{
-            padding:'12px 20px',
-            cursor:'pointer',
-            fontWeight:'bold'
+            padding: '15px 25px',
+            fontSize: 18,
+            cursor: 'pointer',
+            background: '#00ff99',
+            border: 'none',
+            fontWeight: 'bold'
           }}
         >
           ADD
         </button>
 
         <button
-          onClick={resetAll}
+          onClick={() => {
+            setHistory([])
+            setWins(0)
+            setLosses(0)
+          }}
           style={{
-            padding:'12px 20px',
-            cursor:'pointer',
-            background:'red',
-            color:'white',
-            border:'none'
+            padding: '15px 25px',
+            fontSize: 18,
+            cursor: 'pointer',
+            background: 'red',
+            color: 'white',
+            border: 'none',
+            fontWeight: 'bold'
           }}
         >
           RESET
         </button>
-
       </div>
 
-      <div style={{
-        marginTop:'30px',
-        background:'#1c1c1c',
-        padding:'20px',
-        borderRadius:'12px'
-      }}>
+      <div
+        style={{
+          background: '#111',
+          padding: 20,
+          borderRadius: 12,
+          marginBottom: 20
+        }}
+      >
+        <h2 style={{ fontSize: 32 }}>
+          🤖 AI Prediction:
+        </h2>
 
-        <h2>🤖 AI Detection</h2>
+        <h1
+          style={{
+            color: '#00ff99',
+            fontSize: 50,
+            marginTop: 10
+          }}
+        >
+          {stats.prediction}
+        </h1>
 
-        <p style={{
-          color:'#00ff99',
-          fontSize:'24px'
-        }}>
-          {prediction}
+        <p style={{ marginTop: 10 }}>
+          Based on sector repetition analysis
         </p>
-
       </div>
 
-      <div style={{
-        marginTop:'30px'
-      }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2,1fr)',
+          gap: 20
+        }}
+      >
+        <div
+          style={{
+            background: '#111',
+            padding: 20,
+            borderRadius: 12
+          }}
+        >
+          <h2>🔥 HOT NUMBERS</h2>
 
-        <h2>🔥 HOT NUMBERS</h2>
-
-        <div style={{
-          display:'flex',
-          gap:'10px',
-          flexWrap:'wrap'
-        }}>
-
-          {hotNumbers.map(([num,count],i)=>(
-
-            <div
-              key={i}
-              style={{
-                background:'#222',
-                padding:'15px',
-                borderRadius:'12px',
-                textAlign:'center',
-                minWidth:'80px'
-              }}
-            >
-              <div style={{
-                fontSize:'24px'
-              }}>
-                {num}
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              flexWrap: 'wrap',
+              marginTop: 15
+            }}
+          >
+            {stats.hotNumbers.map(([n, freq]) => (
+              <div
+                key={n}
+                style={{
+                  background: '#00ff99',
+                  color: 'black',
+                  padding: 15,
+                  borderRadius: 10,
+                  fontWeight: 'bold'
+                }}
+              >
+                {n} ({freq}x)
               </div>
-
-              <div>
-                {count}x
-              </div>
-            </div>
-
-          ))}
-
+            ))}
+          </div>
         </div>
 
+        <div
+          style={{
+            background: '#111',
+            padding: 20,
+            borderRadius: 12
+          }}
+        >
+          <h2>📊 SCORE</h2>
+
+          <h1 style={{ color: '#00ff99' }}>
+            WINS: {wins}
+          </h1>
+
+          <h1 style={{ color: 'red' }}>
+            LOSSES: {losses}
+          </h1>
+
+          <h2>
+            ACCURACY: {accuracy}%
+          </h2>
+        </div>
+
+        <div
+          style={{
+            background: '#111',
+            padding: 20,
+            borderRadius: 12
+          }}
+        >
+          <h2>🎯 SECTORS</h2>
+
+          <p>VOISINS: {stats.sectorCount.VOISINS}</p>
+          <p>TIERS: {stats.sectorCount.TIERS}</p>
+          <p>ORPHELINS: {stats.sectorCount.ORPHELINS}</p>
+          <p>ZERO: {stats.sectorCount.ZERO}</p>
+        </div>
+
+        <div
+          style={{
+            background: '#111',
+            padding: 20,
+            borderRadius: 12
+          }}
+        >
+          <h2>🎨 COLORS</h2>
+
+          <p>🔴 RED: {stats.reds}</p>
+          <p>⚫ BLACK: {stats.blacks}</p>
+          <p>⚪ EVEN: {stats.evens}</p>
+          <p>⚫ ODD: {stats.odds}</p>
+        </div>
       </div>
 
-      <div style={{
-        marginTop:'40px'
-      }}>
+      <div
+        style={{
+          background: '#111',
+          padding: 20,
+          borderRadius: 12,
+          marginTop: 20
+        }}
+      >
+        <h2>🕒 LAST 30 NUMBERS</h2>
 
-        <h2>🎯 Last 30 Spins</h2>
-
-        <div style={{
-          display:'flex',
-          gap:'10px',
-          flexWrap:'wrap'
-        }}>
-
-          {numbers.map((n,i)=>(
-
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginTop: 15
+          }}
+        >
+          {history.slice(0, 30).map((n, i) => (
             <div
               key={i}
               style={{
-                width:'60px',
-                height:'60px',
-                borderRadius:'50%',
-                background:getColor(n),
-                display:'flex',
-                alignItems:'center',
-                justifyContent:'center',
-                fontWeight:'bold',
-                fontSize:'20px',
-                border:'2px solid white'
+                width: 55,
+                height: 55,
+                borderRadius: 10,
+                background:
+                  n === 0
+                    ? 'green'
+                    : redNumbers.includes(n)
+                    ? '#ff2d55'
+                    : '#222',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                fontWeight: 'bold',
+                fontSize: 22
               }}
             >
               {n}
             </div>
-
           ))}
-
         </div>
-
       </div>
-
     </main>
   )
 }
