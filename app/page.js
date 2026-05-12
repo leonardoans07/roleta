@@ -5,9 +5,12 @@ import { useState, useMemo } from 'react'
 export default function Home() {
   const [number, setNumber] = useState('')
   const [history, setHistory] = useState([])
+
+  const [prediction, setPrediction] = useState('WAIT')
+  const [confidence, setConfidence] = useState(0)
+
   const [wins, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
-  const [prediction, setPrediction] = useState('WAIT')
 
   const redNumbers = [
     1,3,5,7,9,12,14,16,18,
@@ -29,7 +32,7 @@ export default function Home() {
   function getColor(num) {
     if (num === 0) return '#00ff99'
     if (redNumbers.includes(num)) return '#ff2d55'
-    return '#1f1f1f'
+    return '#1a1a1a'
   }
 
   function addNumber() {
@@ -37,11 +40,8 @@ export default function Home() {
 
     if (isNaN(num) || num < 0 || num > 36) return
 
-    // VALIDAR WIN/LOSS APENAS SE JÁ EXISTE PREVISÃO
-    if (
-      prediction !== 'WAIT' &&
-      history.length >= 6
-    ) {
+    // VALIDAR WIN/LOSS
+    if (prediction !== 'WAIT') {
       const result = getDozen(num)
 
       if (result === prediction) {
@@ -52,12 +52,14 @@ export default function Home() {
     }
 
     const updated = [num, ...history].slice(0, 100)
+
     setHistory(updated)
     setNumber('')
   }
 
   const stats = useMemo(() => {
     const last30 = history.slice(0, 30)
+    const last8 = history.slice(0, 8)
 
     let reds = 0
     let blacks = 0
@@ -86,26 +88,81 @@ export default function Home() {
       frequency[n] = (frequency[n] || 0) + 1
     })
 
+    // HOT NUMBERS
     const hotNumbers = Object.entries(frequency)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
 
-    // IA ANALISANDO PADRÕES
+    // IA MELHORADA
     let aiPrediction = 'WAIT'
+    let aiConfidence = 0
 
-    if (history.length >= 6) {
-      const strongest = Object.entries(dozens).sort(
-        (a, b) => b[1] - a[1]
-      )[0]
+    if (last8.length >= 8) {
+      const recentDozens = {
+        '1ST 12': 0,
+        '2ND 12': 0,
+        '3RD 12': 0
+      }
 
-      // SÓ ENTRA SE TIVER FORÇA
-      if (strongest[1] >= 4) {
-        aiPrediction = strongest[0]
+      last8.forEach(n => {
+        const d = getDozen(n)
+
+        if (d !== 'ZERO') {
+          recentDozens[d]++
+        }
+      })
+
+      const sorted = Object.entries(recentDozens)
+        .sort((a, b) => b[1] - a[1])
+
+      const strongest = sorted[0]
+      const second = sorted[1]
+
+      const strongestName = strongest[0]
+      const strongestCount = strongest[1]
+      const secondCount = second[1]
+
+      // DOMINÂNCIA
+      const dominance =
+        strongestCount / 8
+
+      // SEQUÊNCIA
+      const last3 = last8
+        .slice(0, 3)
+        .map(n => getDozen(n))
+
+      const streak =
+        last3.every(v => v === strongestName)
+
+      // IA DECISÃO
+      if (
+        strongestCount >= 5 &&
+        dominance >= 0.60
+      ) {
+        aiPrediction = strongestName
+        aiConfidence = Math.floor(
+          dominance * 100
+        )
+      }
+
+      // BOOST POR STREAK
+      if (streak) {
+        aiPrediction = strongestName
+        aiConfidence += 15
+      }
+
+      // EVITAR ENTRADA FRACA
+      if (
+        strongestCount - secondCount <= 1
+      ) {
+        aiPrediction = 'WAIT'
+        aiConfidence = 0
       }
     }
 
     setTimeout(() => {
       setPrediction(aiPrediction)
+      setConfidence(aiConfidence)
     }, 0)
 
     return {
@@ -113,16 +170,18 @@ export default function Home() {
       blacks,
       evens,
       odds,
-      hotNumbers,
       dozens,
-      aiPrediction
+      hotNumbers
     }
   }, [history])
 
   const accuracy =
     wins + losses === 0
       ? 0
-      : ((wins / (wins + losses)) * 100).toFixed(1)
+      : (
+          (wins / (wins + losses)) *
+          100
+        ).toFixed(1)
 
   return (
     <main
@@ -136,11 +195,11 @@ export default function Home() {
     >
       <h1
         style={{
-          fontSize: 48,
+          fontSize: 50,
           marginBottom: 20
         }}
       >
-        ⚡ Lightning Roulette AI
+        ⚡ Lightning Roulette AI PRO
       </h1>
 
       {/* INPUT */}
@@ -148,18 +207,20 @@ export default function Home() {
         style={{
           display: 'flex',
           gap: 10,
-          marginBottom: 20,
-          flexWrap: 'wrap'
+          flexWrap: 'wrap',
+          marginBottom: 20
         }}
       >
         <input
           value={number}
-          onChange={(e) => setNumber(e.target.value)}
+          onChange={(e) =>
+            setNumber(e.target.value)
+          }
           placeholder="Enter roulette number"
           style={{
             padding: 15,
-            fontSize: 20,
             width: 250,
+            fontSize: 18,
             color: 'black'
           }}
         />
@@ -167,10 +228,10 @@ export default function Home() {
         <button
           onClick={addNumber}
           style={{
-            padding: '15px 25px',
-            fontWeight: 'bold',
             background: '#00ff99',
             border: 'none',
+            padding: '15px 25px',
+            fontWeight: 'bold',
             cursor: 'pointer'
           }}
         >
@@ -180,16 +241,17 @@ export default function Home() {
         <button
           onClick={() => {
             setHistory([])
+            setPrediction('WAIT')
             setWins(0)
             setLosses(0)
-            setPrediction('WAIT')
+            setConfidence(0)
           }}
           style={{
-            padding: '15px 25px',
-            fontWeight: 'bold',
             background: 'red',
             color: 'white',
             border: 'none',
+            padding: '15px 25px',
+            fontWeight: 'bold',
             cursor: 'pointer'
           }}
         >
@@ -201,8 +263,8 @@ export default function Home() {
       <div
         style={{
           background: '#111',
-          padding: 25,
-          borderRadius: 12,
+          padding: 30,
+          borderRadius: 14,
           marginBottom: 20
         }}
       >
@@ -210,19 +272,32 @@ export default function Home() {
 
         <h1
           style={{
+            fontSize: 70,
             color:
               prediction === 'WAIT'
-                ? '#999'
+                ? '#888'
                 : '#00ff99',
-            fontSize: 60,
-            marginTop: 10
+            marginBottom: 10
           }}
         >
           {prediction}
         </h1>
 
-        <p>
-          AI analyzing dozens repetition and momentum
+        <h2
+          style={{
+            color: '#ffaa00'
+          }}
+        >
+          CONFIDENCE: {confidence}%
+        </h2>
+
+        <p
+          style={{
+            marginTop: 10,
+            color: '#aaa'
+          }}
+        >
+          AI analyzing dominance, streaks and momentum
         </p>
       </div>
 
@@ -240,7 +315,7 @@ export default function Home() {
           style={{
             background: '#111',
             padding: 20,
-            borderRadius: 12
+            borderRadius: 14
           }}
         >
           <h2>🔥 HOT NUMBERS</h2>
@@ -248,12 +323,12 @@ export default function Home() {
           <div
             style={{
               display: 'flex',
-              flexWrap: 'wrap',
               gap: 10,
+              flexWrap: 'wrap',
               marginTop: 15
             }}
           >
-            {stats.hotNumbers.map(([n, freq]) => (
+            {stats.hotNumbers.map(([n, f]) => (
               <div
                 key={n}
                 style={{
@@ -264,7 +339,7 @@ export default function Home() {
                   fontWeight: 'bold'
                 }}
               >
-                {n} ({freq}x)
+                {n} ({f}x)
               </div>
             ))}
           </div>
@@ -275,7 +350,7 @@ export default function Home() {
           style={{
             background: '#111',
             padding: 20,
-            borderRadius: 12
+            borderRadius: 14
           }}
         >
           <h2>📊 SCORE</h2>
@@ -298,15 +373,26 @@ export default function Home() {
           style={{
             background: '#111',
             padding: 20,
-            borderRadius: 12
+            borderRadius: 14
           }}
         >
           <h2>🎯 DOZENS</h2>
 
-          <p>1ST 12: {stats.dozens['1ST 12']}</p>
-          <p>2ND 12: {stats.dozens['2ND 12']}</p>
-          <p>3RD 12: {stats.dozens['3RD 12']}</p>
-          <p>ZERO: {stats.dozens['ZERO']}</p>
+          <p>
+            1ST 12: {stats.dozens['1ST 12']}
+          </p>
+
+          <p>
+            2ND 12: {stats.dozens['2ND 12']}
+          </p>
+
+          <p>
+            3RD 12: {stats.dozens['3RD 12']}
+          </p>
+
+          <p>
+            ZERO: {stats.dozens['ZERO']}
+          </p>
         </div>
 
         {/* COLORS */}
@@ -314,7 +400,7 @@ export default function Home() {
           style={{
             background: '#111',
             padding: 20,
-            borderRadius: 12
+            borderRadius: 14
           }}
         >
           <h2>🎨 COLORS</h2>
@@ -326,12 +412,12 @@ export default function Home() {
         </div>
       </div>
 
-      {/* LAST 30 */}
+      {/* HISTORY */}
       <div
         style={{
           background: '#111',
           padding: 20,
-          borderRadius: 12,
+          borderRadius: 14,
           marginTop: 20
         }}
       >
@@ -345,24 +431,26 @@ export default function Home() {
             marginTop: 15
           }}
         >
-          {history.slice(0, 30).map((n, i) => (
-            <div
-              key={i}
-              style={{
-                width: 55,
-                height: 55,
-                borderRadius: 10,
-                background: getColor(n),
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 'bold',
-                fontSize: 22
-              }}
-            >
-              {n}
-            </div>
-          ))}
+          {history
+            .slice(0, 30)
+            .map((n, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 55,
+                  height: 55,
+                  borderRadius: 10,
+                  background: getColor(n),
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  fontWeight: 'bold',
+                  fontSize: 22
+                }}
+              >
+                {n}
+              </div>
+            ))}
         </div>
       </div>
     </main>
